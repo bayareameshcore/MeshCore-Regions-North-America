@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MeshCore regions</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    :root {
+      --bg: #f3f0e8;
+      --ink: #1c1915;
+      --muted: #5c564c;
+      --line: #d9d2c5;
+      --card: #fffdf8;
+      --accent: #1f6b45;
+      --accent-ink: #f4fff8;
+      --warn: #8a4b08;
+      --warn-bg: #fff4e5;
+      --danger: #8d2a2a;
+      --code-bg: #1c1915;
+      --code-ink: #f3f0e8;
+      --shadow: 0 1px 0 rgba(28, 25, 21, 0.06);
+    }
+    * { box-sizing: border-box; }
+    [x-cloak] { display: none !important; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 16px/1.45 ui-sans-serif, system-ui, sans-serif;
+    }
+    main {
+      width: min(720px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 28px 0 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    h2 {
+      font-size: 1.15rem;
+      margin: 0 0 6px;
+      letter-spacing: -0.02em;
+    }
+    p { margin: 0 0 10px; }
+    .hint {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-bottom: 12px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+    #map {
+      height: min(52vh, 440px);
+      min-height: 280px;
+      border-radius: 8px;
+    }
+    .tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+    .slug {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.82rem;
+      cursor: pointer;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      padding: 5px 12px;
+    }
+    .slug[aria-pressed="true"] {
+      background: var(--accent);
+      color: var(--accent-ink);
+      border-color: var(--accent);
+    }
+    .banner {
+      font-size: 0.92rem;
+      background: var(--warn-bg);
+      color: var(--warn);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+    }
+    .banner.bad { background: #fdecec; color: var(--danger); }
+    pre {
+      margin: 0 0 12px;
+      background: var(--code-bg);
+      color: var(--code-ink);
+      border-radius: 8px;
+      padding: 12px;
+      overflow: auto;
+      white-space: pre-wrap;
+      font-size: 0.86rem;
+      line-height: 1.4;
+    }
+    .row { display: flex; justify-content: flex-end; gap: 8px; }
+    .copy {
+      font: inherit;
+      cursor: pointer;
+      border-radius: 8px;
+      padding: 8px 14px;
+      background: var(--accent);
+      color: var(--accent-ink);
+      border: 1px solid var(--accent);
+    }
+    .copy:disabled { opacity: 0.45; cursor: not-allowed; }
+    .empty { color: var(--muted); margin: 0; }
+    .load-error { color: var(--danger); margin: 0; }
+  </style>
+</head>
+<body x-data="regionApp" x-init="boot()" x-cloak>
+  <main>
+    <p class="load-error" x-show="loadError" x-text="loadError"></p>
+
+    <section class="card">
+      <h2>Where is Your Repeater?</h2>
+      <p class="hint"><em>Click on the map to locate your repeater.</em></p>
+      <div id="map"></div>
+      <p class="hint" x-show="mapNote" x-text="mapNote"></p>
+    </section>
+
+    <section class="card">
+      <h2>Recommended region setup</h2>
+      <p class="hint">
+        <em>Based on the location you selected, we recommend these repeater settings. You can add other nearby areas by tagging them.</em>
+      </p>
+
+      <p class="empty" x-show="!hasSelection">Click the map to see recommended commands.</p>
+
+      <template x-if="hasSelection">
+        <div>
+          <div class="tags" x-show="badgeList.length > 1">
+            <template x-for="sib in badgeList" :key="sib.code">
+              <button
+                type="button"
+                class="slug"
+                :aria-pressed="isSelected(sib.code) ? 'true' : 'false'"
+                @click="toggleSlugKeepView(sib.code)"
+                x-text="sib.code"
+              ></button>
+            </template>
+          </div>
+
+          <div class="banner" x-show="command.blocked">
+            This is a placeholder slot. The code is a proposal, not a name on the air. The lines below are the chain only. Do not load them onto a node.
+          </div>
+          <div class="banner bad" x-show="command.defTooLong">
+            <span x-text="'The region def line is ' + command.defLine.length + ' characters. The serial limit is ' + (limits.maxLineLength || 160) + '.'"></span>
+          </div>
+          <div class="banner bad" x-show="command.tooMany">
+            <span x-text="command.nameCount + ' names. A node holds ' + (limits.maxRegionNames || 32) + '. Drop a tag or stop higher in the tree.'"></span>
+          </div>
+
+          <pre x-text="command.defText"></pre>
+          <div class="row">
+            <button
+              type="button"
+              class="copy"
+              :disabled="command.blocked"
+              @click="copyCommand()"
+              x-text="copyLabel"
+            ></button>
+          </div>
+        </div>
+      </template>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="region-commands.js"></script>
+  <script src="app.js"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.14.9/dist/cdn.min.js"></script>
+</body>
+</html>
